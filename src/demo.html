@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Calling App</title>
+    <style>
+        video {
+            width: 300px;
+            height: 300px;
+            margin: 10px;
+            border: 2px solid black;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Video Calling App (Max 5 Users)</h1>
+    <div id="videos">
+        <!-- Video elements will appear here -->
+    </div>
+    <script>
+        const signalingServer = new WebSocket('ws://localhost:3000');
+        const peerConnections = {};
+        const userStream = document.createElement('video');
+        userStream.autoplay = true;
+        document.getElementById('videos').appendChild(userStream);
+
+        // Initialize local video stream
+        async function getLocalStream() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            userStream.srcObject = stream;
+            return stream;
+        }
+
+        async function createPeerConnection(peerId, stream) {
+            const pc = new RTCPeerConnection();
+            peerConnections[peerId] = pc;
+
+            // Add tracks to peer connection
+            stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+            // Handle ICE candidates
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    signalingServer.send(JSON.stringify({ type: 'candidate', peerId, candidate: event.candidate }));
+                }
+            };
+
+            // Handle incoming remote stream
+            pc.ontrack = (event) => {
+                const remoteVideo = document.createElement('video');
+                remoteVideo.srcObject = event.streams[0];
+                remoteVideo.autoplay = true;
+                document.getElementById('videos').appendChild(remoteVideo);
+            };
+
+            return pc;
+        }
+
+        // Handle signaling messages
+        signalingServer.onmessage = async (message) => {
+            const data = JSON.parse(message.data);
+
+            if (data.type === 'offer') {
+                const pc = await createPeerConnection(data.peerId, await getLocalStream());
+                await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                signalingServer.send(JSON.stringify({ type: 'answer', peerId: data.peerId, answer }));
+            }
+
+            if (data.type === 'answer') {
+                const pc = peerConnections[data.peerId];
+                await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+            }
+
+            if (data.type === 'candidate') {
+                const pc = peerConnections[data.peerId];
+                if (pc) {
+                    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                }
+            }
+        };
+
+        // Start the video call by sending an offer to others
+        async function startCall() {
+            const localStream = await getLocalStream();
+
+            signalingServer.onopen = async () => {
+                signalingServer.send(JSON.stringify({ type: 'join', peerId: 'user1' }));
+            };
+
+            // Create a peer connection and send an offer to another user
+            async function createOffer(peerId) {
+                const pc = await createPeerConnection(peerId, localStream);
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                signalingServer.send(JSON.stringify({ type: 'offer', peerId, offer }));
+            }
+
+            // Create offer to connect with up to 5 users
+            for (let i = 1; i <= 5; i++) {
+                createOffer(`user${i}`);
+            }
+        }
+
+        startCall();
+    </script>
+</body>
+
+</html>
