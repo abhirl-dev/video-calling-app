@@ -26,6 +26,11 @@ class WebRTC {
     #topic
 
     /**
+     * @type {Map<string, RTCPeerConnection>}
+     */
+    peerConnections;
+
+    /**
      * @param {RTCConfiguration} config 
      * @param {string} webSocketURL
      * @param {string} topic 
@@ -34,8 +39,8 @@ class WebRTC {
         this.#peerConnection = new RTCPeerConnection(config);
         this.#webSocket = new Socket({
             url: webSocketURL,
-            username: "",
-            password: "",
+            username: "admin",
+            password: "admin",
             reconnect: true,
         });
         this.#topic = topic;
@@ -43,7 +48,7 @@ class WebRTC {
     }
 
     #init() {
-        console.info("web RTC initialization complete ... OK");
+        console.info("WEB RTC initialization completed ... CONNECTION OK");
         this.#webSocket.subscribe(this.#topic);
 
         this.#peerConnection.ontrack = (ev => {
@@ -64,8 +69,6 @@ class WebRTC {
 
                 switch (data.type) {
                     case "offer":
-                        console.log(data.offer);
-
                         // Handle incoming offer
                         await this.#peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
 
@@ -74,9 +77,6 @@ class WebRTC {
                         await this.#peerConnection.setLocalDescription(answer);
 
                         this.#webSocket.publish(this.#topic, "call", { type: "answer", answer });
-
-
-                        // send(JSON.stringify({ type: "answer", answer }));
                         break;
 
                     case "answer":
@@ -101,10 +101,21 @@ class WebRTC {
     }
 
     /**
-     * @param {MediaStream} mediaStream 
+     * @param {boolean} [enableAudio=true] 
+     * @param {boolean} [enableVideo=true] 
+     * @returns {Promise<MediaStream>}
      */
-    async startStream(mediaStream) {
-        this.#mediaStream = mediaStream;
+    async getLocalStream(enableAudio = true, enableVideo = true) {
+        this.#mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        this.enableAudio(enableAudio);
+        this.enableVideo(enableVideo);
+        return this.#mediaStream;
+    }
+
+    /**
+     * @param {MediaStream} [mediaStream=this.#mediaStream] 
+     */
+    async startStream(mediaStream = this.#mediaStream) {
         mediaStream.getTracks().forEach((track) => {
             this.#peerConnection.addTrack(track, mediaStream);
         });
@@ -113,8 +124,19 @@ class WebRTC {
         await this.#peerConnection.setLocalDescription(offer);
 
         // Send the offer to the signaling server
-        // this.#webSocket.send(JSON.stringify({ type: "offer", offer }));
         this.#webSocket.publish(this.#topic, "call", { type: "offer", offer });
+    }
+
+    enableAudio(enable = true) {
+        this.#mediaStream.getAudioTracks().forEach(track => {
+            track.enabled = enable;
+        });
+    }
+
+    enableVideo(enable = true) {
+        this.#mediaStream.getVideoTracks().forEach(track => {
+            track.enabled = enable;
+        });
     }
 
     stopStream() {
@@ -129,6 +151,54 @@ class WebRTC {
 
     onReceiveStream = ((track = new RTCTrackEvent()) => { });
     onClose = ((message = "") => { });
+
+
+
+
+
+
+    //#########################################################
+    //################## BETA #################################
+    //#########################################################
+    /**
+     * @param {string} peerId 
+     * @param {MediaStream} stream 
+     * @returns {Promise<RTCPeerConnection>}
+     */
+    async createPeerConnection(peerId, stream) {
+        const pc = new RTCPeerConnection();
+        this.peerConnections[peerId] = pc;
+
+        // Add tracks to peer connection
+        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+        // Handle ICE candidates
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                this.#webSocket.publish(this.#topic, "call", { type: 'candidate', peerId, candidate: event.candidate });
+            }
+        };
+
+        // Handle incoming remote stream
+        pc.ontrack = (event) => {
+            const remoteVideo = document.createElement('video');
+            remoteVideo.srcObject = event.streams[0];
+            remoteVideo.autoplay = true;
+            document.getElementById('videos').appendChild(remoteVideo);
+        };
+
+        return pc;
+    }
+
+    async createOffer(peerId) {
+        const pc = await createPeerConnection(peerId, localStream);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        this.#webSocket.publish(this.#topic, "call", { type: 'offer', peerId, offer });
+    }
+    //#########################################################
+    //################## BETA #################################
+    //#########################################################
 }
 
 export { WebRTC };

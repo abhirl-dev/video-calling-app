@@ -7,10 +7,10 @@
     <title>Video Calling App</title>
     <style>
         video {
-            width: 300px;
-            height: 300px;
+            width: 50px;
+            height: 50px;
             margin: 10px;
-            border: 2px solid black;
+            border: 1px solid black;
         }
     </style>
 </head>
@@ -21,7 +21,7 @@
         <!-- Video elements will appear here -->
     </div>
     <script>
-        const signalingServer = new WebSocket('ws://localhost:3000');
+        const signalingServer = new WebSocket('ws://51.79.160.38:8002/ws');
         const peerConnections = {};
         const userStream = document.createElement('video');
         userStream.autoplay = true;
@@ -101,9 +101,9 @@
             }
 
             // Create offer to connect with up to 5 users
-            for (let i = 1; i <= 5; i++) {
-                createOffer(`user${i}`);
-            }
+            // for (let i = 1; i <= 5; i++) {
+                createOffer(Math.random());
+            // }
         }
 
         startCall();

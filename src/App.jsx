@@ -44,6 +44,7 @@ function App() {
         ]
       },
       URL.prod,
+      "private_call"
     );
 
     webRtc.onReceiveStream = (track) => {
@@ -75,31 +76,20 @@ function App() {
 
   async function _startCall() {
     setOnCall(true);
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    localStream.getAudioTracks().forEach(track => {
-      track.enabled = !muted;
+    await webRtc.getLocalStream(!muted, !stremVideo).then(stream => {
+      localVideo.current.srcObject = stream; // Play local video
+      webRtc.startStream();
     });
-    localStream.getVideoTracks().forEach(track => {
-      track.enabled = !stremVideo;
-    });
-    localVideo.current.srcObject = localStream; // Play local video
-    webRtc.startStream(localStream);
   }
 
   function _toogleAudio() {
     setMuted(!muted);
-
-    localStream.getAudioTracks().forEach(track => {
-      track.enabled = muted;
-    })
+    webRtc.enableAudio(muted);
   }
 
   function _toogleVideo() {
     setStreamVideo(!stremVideo);
-
-    localStream.getVideoTracks().forEach(track => {
-      track.enabled = stremVideo;
-    })
+    webRtc.enableVideo(stremVideo);
   }
 
   return (

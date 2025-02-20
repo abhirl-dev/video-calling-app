@@ -23,7 +23,8 @@ class Socket {
      * @returns {Socket}
      */
     subscribe(topic) {
-        // const url = `${this.#url}?${encodeURIComponent(`username=${this.#username}&password=${this.#password}&topic=${topic}`)}`
+        // const url = `${this.#url}?${encodeURIComponent(`username=${this.#username}&password=${this.#password}&topic=${topic}`)}`;
+        // const url = `${this.#url}?username=${this.#username}&password=${this.#password}&topic=${topic}`;
         const url = this.#url
         this.#wss = new WebSocket(url);
 
