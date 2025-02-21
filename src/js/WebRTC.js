@@ -1,6 +1,24 @@
 import { Socket } from "./Socket";
 
 /**
+ * @type {MediaStreamConstraints}
+ */
+const mediaStreamContraints = {
+    video: {
+        width: { ideal: 240 },
+        height: { ideal: 180 },
+        frameRate: {
+            ideal: 15,
+            max: 15
+        },
+    },
+    audio: {
+        sampleRate: 8000,
+        channelCount: 1,
+    }
+};
+
+/**
  * Config for web rtc ice servers in case of network connection
  * failures the rtc will be redirected over google stun server ...
  * {iceServers: [
@@ -106,7 +124,7 @@ class WebRTC {
      * @returns {Promise<MediaStream>}
      */
     async getLocalStream(enableAudio = true, enableVideo = true) {
-        this.#mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        this.#mediaStream = await navigator.mediaDevices.getUserMedia(mediaStreamContraints);
         this.enableAudio(enableAudio);
         this.enableVideo(enableVideo);
         return this.#mediaStream;
