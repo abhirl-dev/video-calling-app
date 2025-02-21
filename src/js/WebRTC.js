@@ -1,4 +1,5 @@
 import { Socket } from "./Socket";
+import { Log } from "./Log";
 
 /**
  * @type {MediaStreamConstraints}
@@ -66,7 +67,6 @@ class WebRTC {
     }
 
     #init() {
-        console.info("WEB RTC initialization completed ... CONNECTION OK");
         this.#webSocket.subscribe(this.#topic);
 
         this.#peerConnection.ontrack = (ev => {
@@ -87,35 +87,59 @@ class WebRTC {
 
                 switch (data.type) {
                     case "offer":
-                        // Handle incoming offer
-                        await this.#peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-
-                        // Create and send an SDP answer
-                        const answer = await this.#peerConnection.createAnswer();
-                        await this.#peerConnection.setLocalDescription(answer);
-
-                        this.#webSocket.publish(this.#topic, "call", { type: "answer", answer });
+                        // Set incoming offer to webRtc peer ...
+                        await this.#setRemoteDescription(data.offer);
+                        await this.#createAnswer().then(answer => {
+                            this.#webSocket.publish(this.#topic, "call", { type: "answer", answer });
+                        });
                         break;
 
                     case "answer":
-                        // Handle incoming answer
-                        await this.#peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                        // Set incoming answer to webRtc peer ...
+                        await this.#setRemoteDescription(data.answer);
                         break;
 
                     case "ice-candidate":
                         // Add incoming ICE candidates
-                        if (data.candidate) {
+                        if (data.candidate)
                             await this.#peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                        }
                         break;
 
                     default:
-                        console.error("Unknown message type:", data.type);
+                        Log.error("UNKNOW WEB-RTC SIGNAL TYPE => ", data.type);
+                        break;
                 }
             } catch (error) {
-                console.error(error);
+                Log.error("WEB-RTC SIGNALING ERROR =>", error);
             }
         };
+        Log.success("WEB RTC initialization completed -> CONNECTION OK");
+    }
+
+    /**
+     * @returns {Promise<RTCSessionDescriptionInit>}
+     */
+    async #createOffer() {
+        const offer = await this.#peerConnection.createOffer();
+        await this.#peerConnection.setLocalDescription(offer);
+        return offer;
+    }
+
+    /**
+     * Create and send an SDP answer
+     * @returns {Promise<RTCSessionDescriptionInit>}
+     */
+    async #createAnswer() {
+        const answer = await this.#peerConnection.createAnswer();
+        await this.#peerConnection.setLocalDescription(answer);
+        return answer;
+    }
+
+    /**
+     * @param {RTCSessionDescriptionInit} remoteDescription 
+     */
+    async #setRemoteDescription(remoteDescription) {
+        await this.#peerConnection.setRemoteDescription(new RTCSessionDescription(remoteDescription));
     }
 
     /**
@@ -138,11 +162,10 @@ class WebRTC {
             this.#peerConnection.addTrack(track, mediaStream);
         });
 
-        const offer = await this.#peerConnection.createOffer();
-        await this.#peerConnection.setLocalDescription(offer);
-
-        // Send the offer to the signaling server
-        this.#webSocket.publish(this.#topic, "call", { type: "offer", offer });
+        await this.#createOffer().then(offer => {
+            // Send the offer to the signaling server
+            this.#webSocket.publish(this.#topic, "call", { type: "offer", offer });
+        });
     }
 
     enableAudio(enable = true) {
